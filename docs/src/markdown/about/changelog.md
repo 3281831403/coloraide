@@ -6,6 +6,9 @@ icon: lucide/scroll-text
 ## 8.15
 
 -   **NEW**: Drop support for Python 3.10.
+-   **NEW**: CSS Color 5 `color-mix()` syntax can now be parsed by `Color()` and `Color.match()`, including
+    interpolation in any registered color space, hue interpolation methods, normalized percentage weights,
+    multi-color lists, and nested calls.
 -   **FIX**: For consistency, have `oklch-cubic` gamut mapping handle HDR targets similar to other chroma reduction
     algorithms (e.g. don't clamp the limits of their channels to SDR ranges).
 -   **FIX**: Improve performance of wavelength calculations.

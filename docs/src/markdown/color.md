@@ -116,6 +116,30 @@ identifier name.
 Color('color(--hsl 130 40% 75% / 0.5)')
 ```
 
+#### Color Mix
+
+CSS Color Level 5 `#!css-color color-mix()` is also accepted as an input. A color mix is evaluated in the color space
+given after `#!css-color in`, and the returned color stays in that space. Any registered color space may be used,
+including non-CSS spaces referenced via their `--` identifier. For cylindrical spaces, a hue interpolation method of
+`#!css-color shorter` (default), `#!css-color longer`, `#!css-color increasing`, or `#!css-color decreasing` may be
+given.
+
+```py play
+Color('color-mix(in srgb, red 25%, blue)')
+Color('color-mix(in oklch longer hue, red, blue)')
+```
+
+Each color entry may use any supported color syntax (hex, named colors, `#!css-color color()`, etc.) and carries an
+optional percentage. If percentages are omitted, colors are weighted equally; when some are omitted, the missing
+weights fill the remainder up to 100%, and when the given weights total more or less than 100%, they are scaled
+proportionally. Alpha is premultiplied during the mix. More than two colors may be supplied, and `#!css-color
+color-mix()` calls can be nested.
+
+```py play
+Color('color-mix(in srgb, red, green, blue)')
+Color('color-mix(in srgb, color-mix(in srgb, red, white) 25%, blue 75%)')
+```
+
 ### Color Instance Inputs
 
 If another color instance is passed as the input, a new color object will be created using the color data from the

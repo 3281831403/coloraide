@@ -26,11 +26,15 @@ RE_IDENT = re.compile(r'(?i)(-{0,2}[a-z][-a-z0-9_]*)')
 RE_SPACE = re.compile(r'(\s+)')
 RE_LOOSE_SPACE = re.compile(r'(\s*)')
 RE_CHANNEL = re.compile(r'(?i)((?:[+\-]?(?:[0-9]*\.)?[0-9]+(?:e[-+]?[0-9]+)?))(?:(%)|(deg|rad|turn|grad))?|(none)')
+RE_PERCENT = re.compile(r'(?i)([+\-]?(?:[0-9]*\.)?[0-9]+(?:e[-+]?[0-9]+)?%)')
 RE_FUNC_START = re.compile(r'(\()\s*')
 RE_FUNC_END = re.compile(r'\s*(\))')
 RE_COMMA = re.compile(r'\s*(,)\s*')
 RE_SLASH = re.compile(r'\s*(/)\s*')
 RE_CSS_FUNC = re.compile(r'\b(color|rgba?|hsla?|hwb|(?:ok)?lab|(?:ok)?lch|jzazbz|jzczhz|ictcp)\b')
+RE_COLOR_MIX = re.compile(r'(?i)\b(color-mix)\b')
+RE_IN = re.compile(r'(?i)(in)(?=\s)')
+RE_HUE = re.compile(r'(?i)\s*(shorter|longer|increasing|decreasing)\s+(hue)\b')
 
 
 def norm_float(string: str) -> float:

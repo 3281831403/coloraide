@@ -318,6 +318,14 @@ class Color(metaclass=ColorMeta):
         This must return the color space, not the Color object.
         """
 
+        # Attempt color-mix match
+        if string[start:start + 10].lower() == 'color-mix(':
+            from .css import colormix
+            cm = colormix.color_mix(cls, string, start)
+            if cm is not None and (not fullmatch or cm[1] >= len(string)):
+                space_name, coords, alpha = cm[0]
+                return cls.CS_MAP[space_name], coords, alpha, start, cm[1]
+
         # Attempt color match
         if string[start:start + 6].lower() == 'color(':
             for space_class in cls.CS_MAP.values():
