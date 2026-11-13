@@ -45,8 +45,9 @@ class Jzazbz(base.Jzazbz):
         self,
         string: str,
         start: int = 0,
-        fullmatch: bool = True
+        fullmatch: bool = True,
+        color_class: Any = None
     ) -> tuple[tuple[Vector, float], int] | None:
         """Match a CSS color string."""
 
-        return parse.parse_css(self, string, start, fullmatch)
+        return parse.parse_css(self, string, start, fullmatch, color_class=color_class)

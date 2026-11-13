@@ -323,13 +323,13 @@ class Color(metaclass=ColorMeta):
             for space_class in cls.CS_MAP.values():
                 if not space_class.COLOR_FORMAT:  # pragma: no cover
                     continue
-                m = parse.parse_css(space_class, string, start, fullmatch, True)
+                m = parse.parse_css(space_class, string, start, fullmatch, True, cls)
                 if m is not None:
                     return space_class, m[0][0], m[0][1], start, m[1]
 
         # Attempt color space specific match
         for space_class in cls.CS_MAP.values():
-            m2 = space_class.match(string, start, fullmatch)
+            m2 = space_class.match(string, start, fullmatch, cls)
             if m2 is not None:
                 return space_class, m2[0][0], m2[0][1], start, m2[1]
         return None

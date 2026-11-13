@@ -25,12 +25,30 @@ RE_NAME = re.compile(r'(?i)\b([a-z]{3,})\b')
 RE_IDENT = re.compile(r'(?i)(-{0,2}[a-z][-a-z0-9_]*)')
 RE_SPACE = re.compile(r'(\s+)')
 RE_LOOSE_SPACE = re.compile(r'(\s*)')
-RE_CHANNEL = re.compile(r'(?i)((?:[+\-]?(?:[0-9]*\.)?[0-9]+(?:e[-+]?[0-9]+)?))(?:(%)|(deg|rad|turn|grad))?|(none)')
+RE_FROM = re.compile(r'(?i)(from)(?=\s+)')
+RE_CHANNEL = re.compile(
+    r'(?i)((?:[+\-]?(?:[0-9]*\.)?[0-9]+(?:e[-+]?[0-9]+)?))(?:(%)|(deg|rad|turn|grad))?|(none)|(alpha(?![-a-z0-9_]))|([a-z][-a-z0-9_]*)'
+)
 RE_FUNC_START = re.compile(r'(\()\s*')
 RE_FUNC_END = re.compile(r'\s*(\))')
 RE_COMMA = re.compile(r'\s*(,)\s*')
 RE_SLASH = re.compile(r'\s*(/)\s*')
 RE_CSS_FUNC = re.compile(r'\b(color|rgba?|hsla?|hwb|(?:ok)?lab|(?:ok)?lch|jzazbz|jzczhz|ictcp)\b')
+
+# CSS Color 5 relative color syntax is only defined for modern (non-legacy) functions.
+RELATIVE_FUNCS = frozenset(('rgb', 'hsl', 'hwb', 'lab', 'lch', 'oklab', 'oklch'))
+
+# Channel keywords that may be inherited from the origin color, keyed by function name.
+# The standalone `alpha` keyword is tokenized separately and may appear in any position.
+RE_CHANNEL_KEYWORDS = {
+    'rgb': frozenset(('r', 'g', 'b')),
+    'hsl': frozenset(('h', 's', 'l')),
+    'hwb': frozenset(('h', 'w', 'b')),
+    'lab': frozenset(('l', 'a', 'b')),
+    'lch': frozenset(('l', 'c', 'h')),
+    'oklab': frozenset(('l', 'a', 'b')),
+    'oklch': frozenset(('l', 'c', 'h'))
+}
 
 
 def norm_float(string: str) -> float:
@@ -192,13 +210,16 @@ def parse_color(tokens: dict[str, Any], space: Space) -> tuple[Vector, float] | 
     channels = []
     properties = space.CHANNELS
     for i in range(num_channels):
-        c = tokens['func']['values'][i]['value']
+        entry = tokens['func']['values'][i]
+        c = entry['value'].lower()
         channel = properties[i]
-        if channel.flags & FLG_ANGLE:
-            v = norm_angle_channel(c.lower())
+        if entry['type'] == 'degree':
+            if not (channel.flags & FLG_ANGLE):
+                return None
+            v = norm_angle_channel(c)
             channels.append(v * (channel.high / 360) if channel.angle != ANGLE_DEG else v)
         else:
-            channels.append(norm_color_channel(c.lower(), channel.span, channel.offset))
+            channels.append(norm_color_channel(c, channel.span, channel.offset))
     return (channels, alpha)
 
 
@@ -213,10 +234,14 @@ def validate_srgb(tokens: dict[str, Any]) -> bool:
 
     length = len(tokens['func']['values'])
     delimiter = tokens['func']['delimiter']
+    relative = tokens['func']['relative']
 
     if length < 3 or length > 4:
         return False
     vtype = tokens['func']['values'][0]['type']
+    if relative:
+        # Relative colors only use the space separated syntax, keywords may be mixed freely.
+        return bool(delimiter == 'space' and (length == 4) == tokens['func']['slash'])
     if delimiter == 'comma':
         if vtype in ('none', 'degree') or not all(v['type'] == vtype for v in tokens['func']['values'][:3]):
             return False
@@ -236,12 +261,17 @@ def validate_cylindrical_srgb(tokens: dict[str, Any]) -> bool:
     length = len(tokens['func']['values'])
     delimiter = tokens['func']['delimiter']
     func_name = tokens['func']['name']
+    relative = tokens['func']['relative']
 
     if length < 3 or length > 4:
         return False
 
     if func_name == 'hwb' and delimiter == 'comma':
         return False
+
+    if relative:
+        # Relative colors only use the space separated syntax, keywords may be mixed freely.
+        return bool(delimiter == 'space' and (length == 4) == tokens['func']['slash'])
 
     if delimiter == 'comma':
         if tokens['func']['values'][0]['type'] not in ('degree', 'number'):
@@ -266,6 +296,7 @@ def validate_lab(tokens: dict[str, Any]) -> bool:
 
     length = len(tokens['func']['values'])
     delimiter = tokens['func']['delimiter']
+    relative = tokens['func']['relative']
 
     if delimiter == 'comma':
         return False
@@ -273,7 +304,7 @@ def validate_lab(tokens: dict[str, Any]) -> bool:
     if length < 3 or length > 4:
         return False
 
-    if any(v['type'] == 'degree' for v in tokens['func']['values'][:]):
+    if not relative and any(v['type'] == 'degree' for v in tokens['func']['values'][:]):
         return False
 
     if (length == 4) != tokens['func']['slash']:
@@ -287,6 +318,7 @@ def validate_lch(tokens: dict[str, Any]) -> bool:
 
     length = len(tokens['func']['values'])
     delimiter = tokens['func']['delimiter']
+    relative = tokens['func']['relative']
 
     if delimiter == 'comma':
         return False
@@ -294,13 +326,64 @@ def validate_lch(tokens: dict[str, Any]) -> bool:
     if length < 3 or length > 4:
         return False
 
-    if tokens['func']['values'][2]['type'] == 'percent':
+    if not relative:
+        if tokens['func']['values'][2]['type'] == 'percent':
+            return False
+
+        if any(v['type'] == 'degree' for v in tokens['func']['values'][0:2]):
+            return False
+
+        if (length == 4 and tokens['func']['values'][3]['type'] == 'degree'):
+            return False
+
+    if (length == 4) != tokens['func']['slash']:
         return False
 
-    if any(v['type'] == 'degree' for v in tokens['func']['values'][0:2]):
+    return True
+
+
+def find_origin_end(css: str, start: int) -> int:
+    """Find the end of a relative color's origin color, honoring nested functions and parentheses."""
+
+    pos = start
+    depth = 0
+    length = len(css)
+    while pos < length:
+        char = css[pos]
+        if char == '(':
+            depth += 1
+        elif char == ')':
+            if depth == 0:
+                break
+            depth -= 1
+        elif depth == 0 and char.isspace():
+            break
+        pos += 1
+    return pos
+
+
+def validate_relative_channels(tokens: dict[str, Any]) -> bool:
+    """Validate that inherited channel keywords are valid for the relative color function."""
+
+    func_name = tokens['func']['name']
+    keywords = RE_CHANNEL_KEYWORDS.get(func_name)
+    if keywords is None:
         return False
 
-    if (length == 4) != tokens['func']['slash'] or (length == 4 and tokens['func']['values'][3]['type'] == 'degree'):
+    values = tokens['func']['values']
+    length = len(values)
+    if length < 3 or length > 4:
+        return False
+
+    # The `alpha` keyword may appear in any position: it inherits the origin alpha (treated
+    # as a channel value in channel positions). Channel keywords are valid in the slash
+    # position and inherit that channel's value. All other keywords must be channel names.
+    for value in values:
+        if value['type'] == 'keyword' and value['value'].lower() not in keywords:
+            return False
+
+    # An explicit alpha is only valid after a slash.
+    if length == 4 and not tokens['func']['slash']:
         return False
 
     return True
@@ -337,7 +420,13 @@ def tokenize_css(css: str, start: int = 0) -> dict[str, Any]:
             return {}
 
         # Has function body?
-        tokens['func'] = {'name': func_name, 'values': [], 'delimiter': ''}
+        tokens['func'] = {
+            'name': func_name,
+            'values': [],
+            'delimiter': '',
+            'relative': False,
+            'origin': None
+        }
         m = RE_FUNC_START.match(css, m.end())
         if not m:  # pragma: no cover
             return {}
@@ -354,6 +443,27 @@ def tokenize_css(css: str, start: int = 0) -> dict[str, Any]:
             m = RE_SPACE.match(css, m2.end())
             if not m:
                 return {}
+
+        # Relative color syntax (CSS Color 5): `func(from <origin> <channels>)`
+        m2 = RE_FROM.match(css, m.end())
+        if m2:
+            if func_name not in RELATIVE_FUNCS:
+                return {}
+            m3 = RE_SPACE.match(css, m2.end())
+            if not m3:
+                return {}
+            origin_start = m3.end()
+            origin_end = find_origin_end(css, origin_start)
+            if origin_end == origin_start:
+                return {}
+            tokens['func']['relative'] = True
+            tokens['func']['origin'] = css[origin_start:origin_end]
+            m3 = RE_SPACE.match(css, origin_end)
+            if not m3:
+                return {}
+            delimiter = 'space'
+            tokens['func']['delimiter'] = delimiter
+            m = m3
 
         # Gather function channel values, up to 16.
         slash = False
@@ -372,8 +482,12 @@ def tokenize_css(css: str, start: int = 0) -> dict[str, Any]:
                 tokens['func']['values'].append({'type': 'degree', 'value': m.group(0)})
             elif m.group(4):
                 tokens['func']['values'].append({'type': 'none', 'value': m.group(0)})
+            elif m.group(5):
+                tokens['func']['values'].append({'type': 'alpha-keyword', 'value': m.group(5)})
+            elif m.group(6):
+                tokens['func']['values'].append({'type': 'keyword', 'value': m.group(6)})
             else:
-                tokens['func']['values'].append({'type': 'number', 'value': m.group(0)})
+                tokens['func']['values'].append({'type': 'number', 'value': m.group(1)})
 
             if slash:
                 break
@@ -407,6 +521,13 @@ def tokenize_css(css: str, start: int = 0) -> dict[str, Any]:
             m = m2
 
         tokens['func']['slash'] = slash
+
+        # Relative colors cannot use the legacy comma syntax and must inherit valid keywords.
+        if tokens['func']['relative'] and (
+            tokens['func']['delimiter'] == 'comma' or
+            not validate_relative_channels(tokens)
+        ):
+            return {}
 
         # Get function end
         m = RE_FUNC_END.match(css, m.end())
@@ -444,12 +565,84 @@ def tokenize_css(css: str, start: int = 0) -> dict[str, Any]:
     return tokens
 
 
+def parse_origin(color_class: Any, origin: str, target_space: Space) -> Any:
+    """Parse a relative color's origin and convert it into the target color space."""
+
+    match = color_class._match(origin, fullmatch=True)
+    if match is None:
+        return None
+    origin_color = color_class(match[0].NAME, match[1], match[2])
+    if origin_color.space() != target_space.NAME:
+        origin_color = origin_color.convert(target_space.NAME)
+    return origin_color
+
+
+def resolve_relative_channels(
+    tokens: dict[str, Any],
+    origin_color: Any,
+    boundary: tuple[Channel, ...],
+    rgb: bool = False,
+    scaled: bool = False
+) -> tuple[Vector, float]:
+    """Resolve relative color channels, substituting inherited channel keywords from the origin."""
+
+    values = tokens['func']['values']
+    coords = origin_color[:-1]
+    origin_alpha = origin_color[-1]
+    keyword_index = {str(channel): i for i, channel in enumerate(boundary)}
+
+    channels = []
+    alpha = 1.0
+    for i, entry in enumerate(values):
+        vtype = entry['type']
+        value = entry['value'].lower()
+
+        # Alpha channel (always the last entry when present). The `alpha` keyword inherits
+        # the origin alpha; a channel keyword inherits that channel's coordinate value.
+        if i == len(boundary):
+            if vtype == 'alpha-keyword':
+                alpha = origin_alpha
+            elif vtype == 'keyword':
+                alpha = coords[keyword_index[value]]
+            else:
+                alpha = norm_alpha_channel(value)
+            break
+        bound = boundary[i]
+        if vtype == 'alpha-keyword':
+            # The origin alpha is a 0-1 value interpreted like any other channel number:
+            # RGB channels scale against the 0-255 range, scaled (0-100 native) channels map
+            # the fraction onto the 0-100 scale, and other channels keep the fraction as-is.
+            if rgb:
+                channels.append(origin_alpha * bound.high * RGB_CHANNEL_SCALE)
+            elif scaled:
+                channels.append(norm_scaled_color_channel(str(origin_alpha), bound.high))
+            else:
+                channels.append(origin_alpha)
+        elif vtype == 'keyword':
+            # Inherit the origin channel value after conversion to the target space.
+            channels.append(coords[keyword_index[value]])
+        elif vtype == 'none':
+            channels.append(norm_float(value))
+        elif rgb:
+            channels.append(norm_rgb_channel(value, bound.high))
+        elif bound.flags & FLG_ANGLE:
+            v = norm_angle_channel(value)
+            channels.append(v * (bound.high / 360) if bound.angle != ANGLE_DEG else v)
+        elif scaled:
+            channels.append(norm_scaled_color_channel(value, bound.high))
+        else:
+            channels.append(norm_color_channel(value, bound.span, bound.offset))
+
+    return channels, alpha
+
+
 def parse_css(
     cspace: Space,
     string: str,
     start: int = 0,
     fullmatch: bool = True,
-    color: bool = False
+    color: bool = False,
+    color_class: Any = None
 ) -> tuple[tuple[Vector, float], int] | None:
     """Match a CSS color string."""
 
@@ -473,6 +666,14 @@ def parse_css(
 
     # Scale and convert the channel data according to the CSS space rules
     end = tokens['end']
+    relative = 'func' in tokens and tokens['func']['relative']
+    if relative:
+        if color_class is None:
+            return None
+        origin_color = parse_origin(color_class, tokens['func']['origin'], cspace)
+        if origin_color is None:
+            return None
+
     if 'func' in tokens and tokens['func']['name'] == 'color':
         if color is False:
             return None
@@ -488,9 +689,15 @@ def parse_css(
         elif 'name' in tokens:
             values = color_names.from_name(tokens['name']['color'])
             return (values[:-1], values[-1]), end  # type: ignore[index]
+        elif relative:
+            return resolve_relative_channels(tokens, origin_color, cspace.CHANNELS, rgb=True), end
         else:
             return parse_rgb_channels([v['value'] for v in tokens['func']['values']], cspace.CHANNELS), end
     elif tokens['id'] in ('--hsl', '--hwb'):
+        if relative:
+            return resolve_relative_channels(tokens, origin_color, cspace.CHANNELS, scaled=True), end
         return parse_channels([v['value'] for v in tokens['func']['values']], cspace.CHANNELS, scaled=True), end
     else:
+        if relative:
+            return resolve_relative_channels(tokens, origin_color, cspace.CHANNELS, scaled=False), end
         return parse_channels([v['value'] for v in tokens['func']['values']], cspace.CHANNELS), end

@@ -264,7 +264,8 @@ class Space(Plugin, metaclass=SpaceMeta):
         self,
         string: str,
         start: int = 0,
-        fullmatch: bool = True
+        fullmatch: bool = True,
+        color_class: Any = None
     ) -> tuple[tuple[Vector, float], int] | None:
         """Match a color by string."""
 
