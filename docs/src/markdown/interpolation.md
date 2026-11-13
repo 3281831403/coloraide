@@ -1048,6 +1048,36 @@ Color.interpolate(
 )
 ```
 
+### CSS `steps()` and `linear()` Easings
+
+ColorAide also implements the CSS [`steps()`](https://drafts.csswg.org/css-easing/#step-easing-functions) and
+[`linear()`](https://drafts.csswg.org/css-easing/#linear-easing-functions) easing functions with the same semantics
+as the browser, so keyframe animations using these easings can be reproduced exactly when exporting color sequences.
+
+`steps` creates a step easing with the given number of steps and an optional step position: `jump-start`, `jump-end`
+(the default), `jump-none`, or `jump-both`. `start` and `end` are accepted as aliases of `jump-start` and `jump-end`.
+As in CSS, `jump-none` requires at least 2 steps.
+
+```py play
+from coloraide import steps
+
+Color.interpolate(["red", "blue"], progress=steps(4, 'jump-start'))
+```
+
+`css_linear` creates a CSS `linear()` easing. Each argument is either an output value whose input position is
+resolved automatically (evenly spaced between positioned neighbors), or a tuple of a value and 1 - 2 percentage
+positions. For instance, the CSS easing `linear(0, 0.25 75%, 1)` translates to `css_linear(0, (0.25, 75), 1)`.
+
+```py play
+from coloraide import css_linear
+
+Color.interpolate(["red", "blue"], progress=css_linear(0, (0.25, 75), 1))
+```
+
+Both functions, like all ColorAide easings, can be passed via `progress`, injected inline between colors, or mapped
+to specific channels, and both extrapolate outside the range 0 - 1 exactly as the browser does: `steps()` clamps to
+0 and 1, while `css_linear()` extends the trajectory of the nearest two control points.
+
 ## Color Stops and Hints
 
 Color stops are the position where the transition to and from a color starts and ends. By default, color stops are

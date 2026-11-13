@@ -1,7 +1,7 @@
 """Test easings."""
 import math
 import unittest
-from coloraide import ease, ease_in, ease_out, ease_in_out, linear, cubic_bezier
+from coloraide import Color, ease, ease_in, ease_out, ease_in_out, linear, cubic_bezier, steps, css_linear
 
 
 class TestCubicBezier(unittest.TestCase):
@@ -205,3 +205,341 @@ class TestEasingMethods(unittest.TestCase):
                 1.0
             ]
         )
+
+
+class TestSteps(unittest.TestCase):
+    """Test CSS `steps()` easing against fixed sample tables."""
+
+    def ease(self, method, expected):
+        """Perform easing test."""
+
+        i = -0.5
+        results = []
+        while i < 1.6:
+            results.append(method(i))
+            i += 0.1
+        self.assertTrue(all(math.isclose(a, b, rel_tol=1e-14, abs_tol=1e-15) for a, b in zip(results, expected)))
+
+    def test_jump_end(self):
+        """Test `jump-end` (the default)."""
+
+        self.ease(
+            steps(4),
+            [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.25,
+                0.25,
+                0.5,
+                0.5,
+                0.5,
+                0.75,
+                0.75,
+                0.75,
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0
+            ]
+        )
+
+    def test_jump_start(self):
+        """Test `jump-start`."""
+
+        self.ease(
+            steps(4, 'jump-start'),
+            [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.25,
+                0.25,
+                0.5,
+                0.5,
+                0.75,
+                0.75,
+                0.75,
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0
+            ]
+        )
+
+    def test_jump_none(self):
+        """Test `jump-none`."""
+
+        self.ease(
+            steps(3, 'jump-none'),
+            [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.5,
+                0.5,
+                0.5,
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0
+            ]
+        )
+
+    def test_jump_both(self):
+        """Test `jump-both`."""
+
+        self.ease(
+            steps(2, 'jump-both'),
+            [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                1 / 3,
+                1 / 3,
+                1 / 3,
+                1 / 3,
+                2 / 3,
+                2 / 3,
+                2 / 3,
+                2 / 3,
+                2 / 3,
+                2 / 3,
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+                1.0
+            ]
+        )
+
+    def test_start_end_aliases(self):
+        """Test that `start` and `end` alias `jump-start` and `jump-end`."""
+
+        self.assertEqual(steps(1, 'start')(0.5), steps(1, 'jump-start')(0.5))
+        self.assertEqual(steps(1, 'end')(0.5), steps(1, 'jump-end')(0.5))
+        self.assertEqual(steps(1, 'start')(0.5), 1.0)
+        self.assertEqual(steps(1, 'end')(0.5), 0.0)
+
+    def test_underscore_position(self):
+        """Test that positions with underscores are accepted."""
+
+        self.assertEqual(steps(4, 'jump_start')(0.1), 0.25)
+
+    def test_single_step(self):
+        """Test single step behavior."""
+
+        self.ease(
+            steps(1, 'jump-start'),
+            [0.0] * 6 + [1.0] * 15
+        )
+        self.ease(
+            steps(1, 'jump-both'),
+            [0.0] * 6 + [0.5] * 10 + [1.0] * 5
+        )
+
+    def test_bad_count(self):
+        """Test invalid step counts."""
+
+        with self.assertRaises(ValueError):
+            steps(0)
+
+        with self.assertRaises(ValueError):
+            steps(-2)
+
+        with self.assertRaises(ValueError):
+            steps(2.5)
+
+        with self.assertRaises(ValueError):
+            steps(True)
+
+    def test_jump_none_requires_two_steps(self):
+        """Test that `jump-none` with a single step is invalid."""
+
+        with self.assertRaises(ValueError):
+            steps(1, 'jump-none')
+
+    def test_bad_position(self):
+        """Test invalid step position."""
+
+        with self.assertRaises(ValueError):
+            steps(4, 'bogus')
+
+
+class TestCSSLinear(unittest.TestCase):
+    """Test CSS `linear()` easing against fixed sample tables."""
+
+    def sample(self, method, points, expected):
+        """Sample the easing at the given points and compare against the expected table."""
+
+        results = [method(t) for t in points]
+        self.assertTrue(all(math.isclose(a, b, rel_tol=1e-14, abs_tol=1e-15) for a, b in zip(results, expected)))
+
+    def test_percentage_control_point(self):
+        """Test `linear(0, 0.25 75%, 1)`."""
+
+        self.sample(
+            css_linear(0, (0.25, 75), 1),
+            [-0.75, 0.0, 0.375, 0.75, 0.875, 1.0, 1.5],
+            [-0.25, 0.0, 0.125, 0.25, 0.625, 1.0, 2.5]
+        )
+
+    def test_evenly_spaced_points(self):
+        """Test that points without positions are evenly spaced."""
+
+        self.sample(
+            css_linear(0, 0.2, 0.4, 1),
+            [0.0, 1 / 6, 1 / 3, 0.5, 2 / 3, 1.0],
+            [0.0, 0.1, 0.2, 0.3, 0.4, 1.0]
+        )
+
+    def test_double_position(self):
+        """Test a control point with two positions, `linear(0, 0.5 25% 75%, 1)`."""
+
+        self.sample(
+            css_linear(0, (0.5, 25, 75), 1),
+            [0.0, 0.125, 0.25, 0.5, 0.75, 0.875, 1.0],
+            [0.0, 0.25, 0.5, 0.5, 0.5, 0.75, 1.0]
+        )
+
+    def test_out_of_order_inputs_clamped(self):
+        """Test that inputs that go backwards are clamped to the largest preceding input."""
+
+        self.sample(
+            css_linear((0, 50), (0.75, 25), 1),
+            [0.0, 0.4, 0.5, 0.75, 1.0, 1.5],
+            [0.0, 0.0, 0.75, 0.875, 1.0, 1.25]
+        )
+
+    def test_extrapolate_shared_inputs(self):
+        """Test extrapolation when the boundary points share an input."""
+
+        # First two points share an input
+        self.sample(
+            css_linear((0, 25), (1, 25), 0.5),
+            [-0.5, 0.25, 1.0, 1.5],
+            [0.0, 1.0, 0.5, 1 / 6]
+        )
+
+        # Last two points share an input
+        self.sample(
+            css_linear(0, (1, 75), (0.5, 75)),
+            [-0.5, 0.375, 0.75, 1.0],
+            [-2 / 3, 0.5, 0.5, 0.5]
+        )
+
+    def test_single_point(self):
+        """Test that a single control point always yields its output."""
+
+        self.sample(css_linear(0.5), [-1.0, 0.0, 0.3, 1.0, 2.0], [0.5] * 5)
+
+    def test_bare_linear(self):
+        """Test that `linear(0, 1)` is equivalent to the `linear` keyword."""
+
+        self.sample(css_linear(0, 1), [-0.2, 0.0, 0.3, 1.0, 1.4], [-0.2, 0.0, 0.3, 1.0, 1.4])
+
+    def test_no_points(self):
+        """Test that at least one control point is required."""
+
+        with self.assertRaises(ValueError):
+            css_linear()
+
+    def test_bad_control_point(self):
+        """Test malformed control points."""
+
+        with self.assertRaises(ValueError):
+            css_linear((0.5,))
+
+        with self.assertRaises(ValueError):
+            css_linear((0.5, 25, 50, 75))
+
+        with self.assertRaises(ValueError):
+            css_linear(())
+
+
+class TestCSSEasingInterpolation(unittest.TestCase):
+    """Test CSS easings plugged into `mix`/`interpolate` as `progress` or per-channel easings."""
+
+    def assertColorEqual(self, color1, color2):
+        """Assert two colors have equal coordinates."""
+
+        self.assertEqual(color1.space(), color2.space())
+        self.assertTrue(
+            all(math.isclose(a, b, rel_tol=1e-12, abs_tol=1e-12) for a, b in zip(color1[:], color2[:])),
+            f'{color1[:]} != {color2[:]}'
+        )
+
+    def test_steps_progress(self):
+        """Test `steps()` as the progress of a mix."""
+
+        self.assertColorEqual(
+            Color('red').mix('blue', 0.4, space='srgb', progress=steps(4)),
+            Color('red').mix('blue', 0.25, space='srgb')
+        )
+
+    def test_steps_progress_midpoint(self):
+        """Test that a step landing on the linear midpoint matches the default mix."""
+
+        self.assertColorEqual(
+            Color('red').mix('blue', 0.5, space='srgb', progress=steps(4)),
+            Color('red').mix('blue', 0.5, space='srgb')
+        )
+
+    def test_css_linear_progress(self):
+        """Test `css_linear()` as the progress of an interpolation."""
+
+        self.assertColorEqual(
+            Color.interpolate(['red', 'blue'], space='srgb', progress=css_linear(0, (0.25, 75), 1))(0.875),
+            Color.interpolate(['red', 'blue'], space='srgb')(0.625)
+        )
+
+    def test_inline_easing(self):
+        """Test CSS easings injected directly in the interpolation list."""
+
+        self.assertColorEqual(
+            Color.interpolate(['red', steps(4), 'blue'], space='srgb')(0.4),
+            Color.interpolate(['red', 'blue'], space='srgb')(0.25)
+        )
+
+    def test_channel_mapping(self):
+        """Test CSS easings mapped to specific channels."""
+
+        self.assertColorEqual(
+            Color.interpolate(['red', 'blue'], space='srgb', progress={'r': steps(2)})(0.4),
+            Color('srgb', [1, 0, 0.4])
+        )
+
+    def test_color_steps_unchanged(self):
+        """Test that `Color.steps` is unaffected by the `steps` easing."""
+
+        colors = Color.steps(['red', 'blue'], steps=3, space='srgb')
+        self.assertEqual(len(colors), 3)
+        self.assertColorEqual(colors[0], Color('red'))
+        self.assertColorEqual(colors[2], Color('blue'))
