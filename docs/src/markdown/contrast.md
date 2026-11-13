@@ -86,7 +86,13 @@ Color("blue").contrast("red", method='wcag21')
 Methods  | Symmetrical         | Description
 -------- | ------------------  | -----------
 `wcag21` | :octicons-check-16: | WCAG 2.1 contrast ratio.
+`apca`   | :octicons-x-16:     | APCA-W3 0.1.9 perceptual lightness contrast (Lc).
 `lstar`  | :octicons-check-16: | Color difference between two tones in the HCT color space.
+
+All contrast methods evaluate the colors as they are actually rendered on an sRGB screen. Both colors are first
+clipped to the sRGB gamut when needed, and then any transparency in the text color is alpha composited over the
+background following the [CSS compositing rules](./compositing.md) before the contrast is calculated. Opaque colors
+that are already within the sRGB gamut are evaluated directly with no adjustment to their values.
 
 
 ### WCAG 2.1 Contrast Ratio
@@ -110,6 +116,28 @@ This method can be used by specifying `wcag21` as the contrast method.
 ```py play
 Color("blue").contrast("red", method='wcag21')
 ```
+
+### APCA-W3 Perceptual Contrast
+
+> [!success] The APCA contrast method is registered in `Color` by default
+
+The Accessible Perceptual Contrast Algorithm (APCA) is a perceptual contrast model being explored for use in future
+WCAG 3 guidance. ColorAide implements the [APCA-W3 0.1.9 (SAPC-8, G-4g)](https://github.com/Myndex/apca-w3) constants
+and algorithm. It can be selected by specifying `apca` as the contrast method.
+
+```py play
+Color("black").contrast("white", method='apca')
+Color("white").contrast("black", method='apca')
+```
+
+Unlike the WCAG 2.1 ratio, APCA is not symmetrical and is polarity sensitive: the calling color is always the text and
+the provided color the background. A positive Lc value indicates dark text on a light background, while a negative
+value indicates light text on a dark background. The polarity sign must be retained.
+
+The algorithm applies a black level soft clamp to luminance near black, a low contrast smooth rollout that prevents
+polarity reversal, and returns zero for extremely low contrast. Because APCA defines its own sRGB linearization (a
+simple 2.4 monitor exponent with APCA specific coefficients), its Lc values are not directly comparable to the WCAG
+2.1 ratio.
 
 ### Lstar Lightness Difference
 

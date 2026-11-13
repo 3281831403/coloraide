@@ -62,6 +62,7 @@ from .distance.delta_e_itp import DEITP
 from .distance.delta_e_z import DEZ
 from .contrast import ColorContrast
 from .contrast.wcag21 import WCAG21Contrast
+from .contrast.apca import APCAContrast
 from .gamut import Fit, Gamut
 from .gamut.fit_minde_chroma import MINDEChroma
 from .gamut.fit_lch_chroma import LChChroma
@@ -1743,6 +1744,7 @@ Color.register(
 
         # Contrast
         WCAG21Contrast(),
+        APCAContrast(),
 
         # Interpolation
         Linear(),

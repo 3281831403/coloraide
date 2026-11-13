@@ -5,6 +5,12 @@ icon: lucide/scroll-text
 
 ## 8.15
 
+-   **NEW**: Add the APCA-W3 0.1.9 (`apca`) perceptual contrast method, registered in `Color` by default. It returns
+    a signed Lc value, retaining polarity, with the black level soft clamp and low contrast zeroing defined by the
+    0.1.9 (G-4g) algorithm.
+-   **NEW**: All contrast methods (`wcag21`, `apca`, and `lstar`) now evaluate colors as they are actually rendered on
+    an sRGB screen: colors are clipped to the sRGB gamut, and translucent text is alpha composited over the background
+    per the CSS compositing rules before calculating contrast.
 -   **NEW**: Drop support for Python 3.10.
 -   **FIX**: For consistency, have `oklch-cubic` gamut mapping handle HDR targets similar to other chroma reduction
     algorithms (e.g. don't clamp the limits of their channels to SDR ranges).

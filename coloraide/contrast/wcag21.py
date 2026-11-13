@@ -4,7 +4,7 @@ WCAG 2.1 contrast ratio.
 https://www.w3.org/TR/WCAG20/#contrast-ratiodef
 """
 from __future__ import annotations
-from . import ColorContrast
+from . import ColorContrast, prepare_srgb
 from ..types import AnyColor
 from typing import Any
 
@@ -16,6 +16,9 @@ class WCAG21Contrast(ColorContrast):
 
     def contrast(self, color1: AnyColor, color2: AnyColor, **kwargs: Any) -> float:
         """Contrast."""
+
+        # Calculate based on the colors as they are actually displayed on an sRGB screen.
+        color1, color2 = prepare_srgb(color1, color2)
 
         lum1 = max(0, color1.luminance())
         lum2 = max(0, color2.luminance())

@@ -6,7 +6,7 @@ Used for color contrast in Google's HCT.
 https://material.io/blog/science-of-color-design
 """
 from __future__ import annotations
-from . import ColorContrast
+from . import ColorContrast, prepare_srgb
 from ..types import AnyColor
 from typing import Any
 
@@ -18,6 +18,9 @@ class LstarContrast(ColorContrast):
 
     def contrast(self, color1: AnyColor, color2: AnyColor, **kwargs: Any) -> float:
         """Contrast."""
+
+        # Calculate based on the colors as they are actually displayed on an sRGB screen.
+        color1, color2 = prepare_srgb(color1, color2)
 
         l1 = color1.get('lch-d65.lightness', nans=False)
         l2 = color2.get('lch-d65.lightness', nans=False)
