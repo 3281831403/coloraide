@@ -73,6 +73,18 @@ Steps([c.filter('grayscale', 1).clip() for c in colors])
 > Color('#07c7ed').filter('grayscale', 1, out_space='hsl')
 > ```
 
+`filter()` also accepts a CSS filter function list, just as it would be written in a CSS `filter` property. Functions
+may specify amounts as percentages or numbers, and `hue-rotate` additionally accepts angles in `deg`, `grad`, `rad`, or
+`turn`. The filters are applied in the order they are written, and the entire list is evaluated in one shot within the
+filtering color space.
+
+```py play
+inputs = ['red', 'orange', 'yellow', 'green', 'blue', 'indigo', 'violet']
+colors = Color.steps(inputs, steps=10, space='srgb')
+Steps(colors)
+Steps([c.filter('sepia(60%) hue-rotate(90deg)').clip() for c in colors])
+```
+
 ## Color Vision Deficiency Simulation
 
 Color blindness or color vision deficiency (CVD) affects approximately 1 in 12 men (8%) and 1 in 200 women. CVD affects

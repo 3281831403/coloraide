@@ -73,6 +73,149 @@ class TestFilters(util.ColorAssertsPyTest):
         )
 
 
+class TestFilterFunctionList(util.ColorAssertsPyTest):
+    """Test CSS filter function lists."""
+
+    @pytest.mark.parametrize(
+        'color1,functions,color2',
+        [
+            ('red', 'sepia(60%) hue-rotate(90deg)', 'rgb(112.38 163.94 -57.783)'),
+            ('orange', 'grayscale(50%) brightness(1.2)', 'rgb(242.13 189.98 146.37)'),
+            ('blue', 'invert(100%) opacity(50%)', 'rgb(255 255 0 / 0.5)'),
+            ('green', 'hue-rotate(0.5turn) saturate(200%)', 'rgb(181.17 49.499 181.17)'),
+            ('indigo', 'contrast(150%) sepia(25%) hue-rotate(100grad)', 'rgb(42.059 -141.62 -135.29)'),
+            ('violet', 'brightness(0.8) contrast(120%) saturate(1.5)', 'rgb(247.88 46.503 247.88)'),
+            ('teal', 'hue-rotate(3.141592653589793rad) invert(0.25)', 'rgb(173.37 151.55 151.55)')
+        ]
+    )
+    def test_filter_list(self, color1, functions, color2):
+        """Test that a CSS filter function list produces the expected color."""
+
+        print('color1: ', color1)
+        print('functions: ', functions)
+        print('color2: ', color2)
+        self.assertColorEqual(Color(color1).filter(functions, out_space='srgb'), Color(color2))
+
+    @pytest.mark.parametrize(
+        'functions,chain',
+        [
+            ('sepia(60%) hue-rotate(90deg)', [('sepia', 0.6), ('hue-rotate', 90)]),
+            ('sepia(0.6) hue-rotate(90)', [('sepia', 0.6), ('hue-rotate', 90)]),
+            ('hue-rotate(100grad)', [('hue-rotate', 90)]),
+            ('hue-rotate(0.25turn)', [('hue-rotate', 90)]),
+            ('hue-rotate(1.5707963267948966rad)', [('hue-rotate', 90)]),
+            ('grayscale()', [('grayscale', None)]),
+            ('invert(50%) opacity(0.25)', [('invert', 0.5), ('opacity', 0.25)]),
+            ('saturate(200%) brightness(1.2) contrast(80%)',
+             [('saturate', 2), ('brightness', 1.2), ('contrast', 0.8)])
+        ]
+    )
+    def test_filter_list_matches_chained_calls(self, functions, chain):
+        """Test that a filter list matches applying the equivalent filters one at a time."""
+
+        expected = Color('orange')
+        for name, amount in chain:
+            expected = expected.filter(name, amount)
+        expected = expected.convert('srgb', in_place=True)
+
+        self.assertColorEqual(Color('orange').filter(functions, out_space='srgb'), expected)
+
+    def test_filter_list_order_matters(self):
+        """Test that filter functions are applied in the order they are written."""
+
+        self.assertColorNotEqual(
+            Color('red').filter('sepia(60%) hue-rotate(90deg)'),
+            Color('red').filter('hue-rotate(90deg) sepia(60%)')
+        )
+        self.assertColorEqual(
+            Color('red').filter('hue-rotate(90deg) sepia(60%)'),
+            Color('red').filter('hue-rotate', 90).filter('sepia', 0.6)
+        )
+
+    def test_filter_list_out_space(self):
+        """Test that out_space is still respected with a filter list."""
+
+        self.assertColorEqual(
+            Color('red').filter('grayscale(100%)', out_space='hsl'),
+            Color('red').filter('grayscale', 1, out_space='hsl')
+        )
+
+    def test_filter_list_space(self):
+        """Test that the filtering space can be specified with a filter list."""
+
+        self.assertColorEqual(
+            Color('red').filter('sepia(100%)', space='srgb'),
+            Color('red').filter('sepia', 1, space='srgb')
+        )
+
+
+class TestFilterFunctionListErrors(util.ColorAsserts, unittest.TestCase):
+    """Test CSS filter function list error handling."""
+
+    def test_unknown_function(self):
+        """Test that an unknown filter function raises an error."""
+
+        with self.assertRaises(ValueError):
+            Color('red').filter('blur(5px)')
+
+    def test_empty_list(self):
+        """Test that an empty filter list raises an error."""
+
+        with self.assertRaises(ValueError):
+            Color('red').filter('')
+
+        with self.assertRaises(ValueError):
+            Color('red').filter('   ')
+
+    def test_comma_separated(self):
+        """Test that comma separated filter functions raise an error."""
+
+        with self.assertRaises(ValueError):
+            Color('red').filter('sepia(60%), hue-rotate(90deg)')
+
+    def test_amount_with_list(self):
+        """Test that specifying an amount with a filter list raises an error."""
+
+        with self.assertRaises(ValueError):
+            Color('red').filter('sepia(60%)', 0.5)
+
+    def test_percentage_with_hue_rotate(self):
+        """Test that hue-rotate rejects percentages."""
+
+        with self.assertRaises(ValueError):
+            Color('red').filter('hue-rotate(50%)')
+
+    def test_angle_with_non_hue_rotate(self):
+        """Test that non hue-rotate filters reject angles."""
+
+        with self.assertRaises(ValueError):
+            Color('red').filter('sepia(90deg)')
+
+    def test_too_many_arguments(self):
+        """Test that more than one argument raises an error."""
+
+        with self.assertRaises(ValueError):
+            Color('red').filter('sepia(0.5 0.3)')
+
+    def test_unclosed_parenthesis(self):
+        """Test that an unclosed parenthesis raises an error."""
+
+        with self.assertRaises(ValueError):
+            Color('red').filter('sepia(0.5')
+
+    def test_trailing_garbage(self):
+        """Test that trailing content after a function raises an error."""
+
+        with self.assertRaises(ValueError):
+            Color('red').filter('sepia(0.5) 0.5')
+
+    def test_bad_argument(self):
+        """Test that a nonsensical argument raises an error."""
+
+        with self.assertRaises(ValueError):
+            Color('red').filter('sepia(lots)')
+
+
 class TestFilterMisc(util.ColorAsserts, unittest.TestCase):
     """Test filter miscellaneous cases."""
 

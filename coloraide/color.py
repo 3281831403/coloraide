@@ -1319,7 +1319,13 @@ class Color(metaclass=ColorMeta):
         in_place: bool = False,
         **kwargs: Any
     ) -> Self:
-        """Filter."""
+        """
+        Filter.
+
+        `name` may be a single filter name (optionally paired with `amount`) or a CSS filter function
+        list such as `'sepia(60%) hue-rotate(90deg)'`, in which case each function is applied in the
+        order it is written and `amount` must not be specified.
+        """
 
         return filters.filters(self, name, amount, space, out_space, in_place, **kwargs)
 
